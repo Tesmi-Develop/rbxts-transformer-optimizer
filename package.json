@@ -1,13 +1,13 @@
 {
-	"name": "rbxts-transformer-services",
-	"version": "1.1.1",
-	"description": "A transformer that converts @rbxts/services imports into plain GetService calls.",
+	"name": "rbxts-transformer-optimizer",
+	"version": "1.0.0",
+	"description": "Optimizes array and map methods",
 	"main": "out/index.js",
-	"author": "Fireboltofdeath <fireboltofpublic@gmail.com> (https://github.com/Fireboltofdeath)",
+	"author": "Tesmi (https://github.com/Tesmi-Develop)",
 	"license": "ISC",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/FireTS/rbxts-transformer-services.git"
+		"url": "https://github.com/Tesmi-Develop/rbxts-transformer-foreach-optimization.git"
 	},
 	"peerDependencies": {
 		"typescript": "^5.2.2"
