@@ -53,10 +53,22 @@ export function haveReturn(node: ts.Node): boolean {
 	return isReturn;
 }
 
-export function isRbxtsArray(node: ts.TypeNode): boolean {
+export function isRbxtsArray(node: ts.Node): boolean {
 	const typeChecker = TransformContext.instance.typeChecker;
-	const type = typeChecker.getTypeFromTypeNode(node);
-	const a = type.getProperties();
-	//return ts.isIdentifier(node) && node.text === "Array";
-	return true;
+	const type = typeChecker.getTypeAtLocation(node);
+	return type.getProperties().find((prop) => prop.name === "_nominal_Array") !== undefined;
+}
+
+export function isRbxtsMap(node: ts.Node): boolean {
+	const typeChecker = TransformContext.instance.typeChecker;
+	const type = typeChecker.getTypeAtLocation(node);
+	return type.getProperties().find((prop) => prop.name === "_nominal_Map") !== undefined;
+}
+
+export function getCollectionNodeFromCallExpression(node: ts.Node) {
+	if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) {
+		return;
+	}
+
+	return node.expression.expression;
 }

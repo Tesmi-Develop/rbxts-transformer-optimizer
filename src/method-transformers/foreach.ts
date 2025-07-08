@@ -1,7 +1,14 @@
 import ts from "typescript";
-import { MethodTransformer } from "../method-transformer";
-import { overrideBlockStatements, TransformContext } from "../../transformer";
-import { findAllLoopsAndSwitchs, haveReturn, isValidMethod } from "../../utility";
+import { MethodTransformer } from "./method-transformer";
+import { overrideBlockStatements, TransformContext } from "../transformer";
+import {
+	findAllLoopsAndSwitchs,
+	getCollectionNodeFromCallExpression,
+	haveReturn,
+	isRbxtsArray,
+	isRbxtsMap,
+	isValidMethod,
+} from "../utility";
 
 export class Foreach implements MethodTransformer {
 	private insideForeach = false;
@@ -25,7 +32,12 @@ export class Foreach implements MethodTransformer {
 	}
 
 	public Indentify(node: ts.Node): boolean {
-		return this.isForeach(node);
+		const collectionNode = getCollectionNodeFromCallExpression(node);
+		return (
+			this.isForeach(node) &&
+			collectionNode !== undefined &&
+			(isRbxtsArray(collectionNode) || isRbxtsMap(collectionNode))
+		);
 	}
 
 	public IsCanOptimize(node: ts.CallExpression): boolean {
