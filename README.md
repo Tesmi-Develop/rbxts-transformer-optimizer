@@ -25,7 +25,6 @@ Add to your ``tsconfig.json``:
     "plugins": [
       {
         "transform": "rbxts-transformer-optimizer",
-        "after": true
       }
     ]
   }
