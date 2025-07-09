@@ -1,108 +1,21 @@
 import ts from "typescript";
-import { MethodTransformer } from "./method-transformer";
-import { overrideBlockStatements, TransformContext } from "../transformer";
-import {
-	findAllLoopsAndSwitchs,
-	getCollectionNodeFromCallExpression,
-	haveReturn,
-	isRbxtsArray,
-	isRbxtsMap,
-	isValidMethod,
-} from "../utility";
+import { TransformContext } from "../transformer";
+import { getCollectionNodeFromCallExpression, isRbxtsArray, isRbxtsMap } from "../utility";
+import { BaseMethodTransformer } from "./base-method-transformer";
 
-export class Foreach implements MethodTransformer {
-	private insideForeach = false;
-
-	public ProcessNode(node: ts.Node): [ts.Node, boolean] {
-		if (ts.isFunctionLikeDeclaration(node)) {
-			const lastInsideForeach = this.insideForeach;
-
-			this.insideForeach = false;
-			const newNode = TransformContext.instance.transform(node);
-			this.insideForeach = lastInsideForeach;
-
-			return [newNode, true] as const;
-		}
-
-		if (this.insideForeach && ts.isReturnStatement(node)) {
-			return [TransformContext.instance.factory.createContinueStatement(undefined), true] as const;
-		}
-
-		return [node, false] as const;
-	}
+export class Foreach extends BaseMethodTransformer {
+	protected methodName = "forEach";
 
 	public Indentify(node: ts.Node): boolean {
 		const collectionNode = getCollectionNodeFromCallExpression(node);
 		return (
-			this.isForeach(node) &&
+			this.isValidMethod(node) &&
 			collectionNode !== undefined &&
 			(isRbxtsArray(collectionNode) || isRbxtsMap(collectionNode))
 		);
 	}
 
-	public IsCanOptimize(node: ts.CallExpression): boolean {
-		const func = node.arguments[0];
-		if (!ts.isFunctionLikeDeclaration(func)) {
-			return false;
-		}
-
-		const loops = findAllLoopsAndSwitchs(func.body);
-		const found = loops.find((loop) => haveReturn(loop));
-
-		return found === undefined;
-	}
-
-	public Optimize(node: ts.CallExpression): void {
-		const functionArgument = node.arguments[0] as ts.FunctionLikeDeclaration;
-		const indexNode = functionArgument.parameters[1];
-		const valueNode = functionArgument.parameters[0];
-		const arrayName = functionArgument.parameters[2];
-		let statements: ReadonlyArray<ts.Statement> = [];
-
-		if (functionArgument.body !== undefined && ts.isBlock(functionArgument.body)) {
-			statements = this.allowReplaceAllReturns(functionArgument.body).statements;
-		}
-
-		if (functionArgument.body !== undefined && !ts.isBlock(functionArgument.body)) {
-			const clearContext = overrideBlockStatements();
-			const statement = this.allowReplaceAllReturns(functionArgument);
-
-			if (!this.isForeach(statement.body as ts.CallExpression)) {
-				TransformContext.blockStatements.push(statement.body as ts.Statement);
-			}
-
-			statements = [...TransformContext.blockStatements];
-			clearContext();
-		}
-
-		const forNodes = this.createArrayLoop(
-			(node.expression as ts.PropertyAccessExpression).expression.getText(),
-			ts.isIdentifier(node.expression),
-			statements,
-			indexNode?.name.getText(),
-			valueNode?.name.getText(),
-			arrayName?.name.getText(),
-		);
-
-		TransformContext.isRemoveCurrentStatement = true;
-		TransformContext.blockStatements.push(...forNodes);
-	}
-
-	private isForeach(node: ts.Node): node is ts.CallExpression {
-		return isValidMethod(node, "forEach", 1);
-	}
-
-	private allowReplaceAllReturns<T extends ts.Node>(node: T): T {
-		const lastInsideForeach = this.insideForeach;
-
-		this.insideForeach = true;
-		node = TransformContext.instance.transform(node);
-		this.insideForeach = lastInsideForeach;
-
-		return node;
-	}
-
-	private createArrayLoop(
+	protected createLoop(
 		arrayName: string,
 		isIdentifier: boolean,
 		statements: ReadonlyArray<ts.Statement>,

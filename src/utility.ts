@@ -72,3 +72,44 @@ export function getCollectionNodeFromCallExpression(node: ts.Node) {
 
 	return node.expression.expression;
 }
+
+export function createIdGenerator() {
+	let id = 0;
+	return () => id++;
+}
+
+export function createVariableWithIdentifier(variableName: string, variableIdentifier: string) {
+	const factory = TransformContext.instance.factory;
+	return factory.createVariableStatement(
+		undefined,
+		factory.createVariableDeclarationList(
+			[
+				factory.createVariableDeclaration(
+					factory.createIdentifier(variableName),
+					undefined,
+					undefined,
+					factory.createIdentifier(variableIdentifier),
+				),
+			],
+			ts.NodeFlags.Let,
+		),
+	);
+}
+
+export function createVariable(variableName: string, variableValue: ts.Expression) {
+	const factory = TransformContext.instance.factory;
+	return factory.createVariableStatement(
+		undefined,
+		factory.createVariableDeclarationList(
+			[
+				factory.createVariableDeclaration(
+					factory.createIdentifier(variableName),
+					undefined,
+					undefined,
+					variableValue,
+				),
+			],
+			ts.NodeFlags.Let,
+		),
+	);
+}

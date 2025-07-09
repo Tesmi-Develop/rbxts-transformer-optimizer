@@ -1,38 +1,83 @@
-# rbxts-transformer-services
-This is a [demo transformer](#template) that converts @rbxts/services imports into plain GetService calls for increased legibility.
+# ⚡ rbxts-transformer-optimizer
 
-## Example
-```ts
-// input.ts
-import { Players, ServerScriptService } from "@rbxts/services";
+<div align="center">
 
-print(Players.LocalPlayer);
-print(ServerScriptService.GetChildren().size());
+[![ISC License](https://img.shields.io/badge/license-ISC-blue.svg)](https://opensource.org/licenses/ISC)
+[![npm version](https://img.shields.io/npm/v/rbxts-transformer-optimizer)](https://www.npmjs.com/package/rbxts-transformer-optimizer)
+
+<div align="left">
+
+A high-performance TypeScript transformer that optimizes array and map operations for Roblox-TS
+
+## 📦 Installation
+
+```bash
+npm install rbxts-transformer-optimizer --save-dev
 ```
+
+## 🛠 Configuration
+
+Add to your ``tsconfig.json``:
+
+```json
+{
+  "compilerOptions": {
+    "plugins": [
+      {
+        "transform": "rbxts-transformer-optimizer",
+        "after": true
+      }
+    ]
+  }
+}
+```
+
+## 💡 Usage
+The transformer will automatically optimize patterns like:
+
+```ts
+const array = [1, 2, 3];
+const doubled = array.map(x => x * 2);
+const filtered = array.filter(x => x > 10);
+```
+
+will look like:
 
 ```lua
--- output.lua
-local Players = game:GetService("Players")
-local ServerScriptService = game:GetService("ServerScriptService")
-print(Players.LocalPlayer)
-print(#ServerScriptService:GetChildren())
+local array = { 1, 2, 3 }
+local __result_0 = table.create(#array)
+for __index, x in pairs(array) do
+	do
+		__result_0[__index + 1] = x * 2
+		continue
+	end
+end
+local doubled = __result_0
+local __result_1 = {}
+for __index, x in pairs(array) do
+	if x > 10 then
+		table.insert(__result_1, x)
+		continue
+	end
+end
+local filtered = __result_1
 ```
 
-# Template
-This transformer is intended to be used as a template for those who are interested in creating their own transformers in roblox-ts.
+Transformer will try to turn the function into a loop if possible. The following methods are currently supported
 
-A necessary resource for those starting out with transformers is [ts-ast-viewer](https://ts-ast-viewer.com/). It shows you the result of AST, relevant properties, symbol information, type information and it automatically generates factory code for nodes. For example, you can see the code this transformer generates [here](https://ts-ast-viewer.com/#code/MYewdgzgLgBACgGwIYE8CmAnCMC8MDmSAtmgHQDiaUAypgG4CWwaAFAESKqYRsCUANACgYImAHUQGANYQADkma4CxMpRr0mrNhIxQZ85nwDcQA).
+| Method          | Optimization Details                                                                 | Example |
+|-----------------|-------------------------------------------------------------------------------------|---------|
+| `array.map()`   | Converts to `for` loop with pre-allocated array                                     | `[1,2,3].map(x => x*2)` → `for` loop |
+| `array.filter()`| Transforms to `for` loop with conditional push                                      | `[1,2,3].filter(x => x>1)` → `for` loop |
+| `array.find()`  | Optimizes to early-returning loop                                                   | `[1,2,3].find(x => x===2)` → `for` loop with break |
+| `array.findIndex()` | Converts to loop with index return                                             | `[1,2,3].findIndex(x => x===2)` → indexed loop |
+| `array.forEach()`| Transforms to simple iteration loop                                               | `[1,2,3].forEach(print)` → basic `for` loop |
+| `map.forEach()`| Transforms to simple iteration loop                                               | `new Map([["a", "b"], ["c", "d"]]).forEach((v, i) => print(v, i));` → basic `for` loop |
 
-I'd also recommend downloading the [TypeScript repo](https://github.com/microsoft/TypeScript) locally as it's extremely helpful when you're using undocumented (the majority of the compiler API), internal or uncommon APIs.
+<p align="center">
+Charm is released under the <a href="LICENSE.md">MIT License</a>.
+</p>
 
-Transformers mutate the TypeScript [AST](https://en.wikipedia.org/wiki/Abstract_syntax_tree) by replacing parts of the AST with new nodes. Transformers are also able to utilize symbol and type information giving you access to TypeScript's advanced control flow analysis.
+<div align="center">
 
-## Other Transformers
-
-Here's a list of transformers if you want to see how they handle working with parts of the TypeScript compiler api not shown here (e.g symbols or types).
-
-- [rbxts-transform-debug](https://github.com/roblox-aurora/rbxts-transform-debug) by [@roblox-aurora](https://github.com/roblox-aurora)
-- [rbxts-transform-env](https://github.com/roblox-aurora/rbxts-transform-env) by [@roblox-aurora](https://github.com/roblox-aurora)
-- [Flamework](https://github.com/rbxts-flamework/transformer) by [@rbxts-flamework](https://github.com/rbxts-flamework)
-
-One other source you may goto for learning about transformers is actually [roblox-ts](https://github.com/roblox-ts/roblox-ts/tree/master/src/TSTransformer) itself. This generates a Luau AST instead of a TS AST but it may still be a useful resource for learning about the compiler api.
+[![MIT License](https://img.shields.io/github/license/Tesmi-Develop/rbxts-transformer-optimizer?style=for-the-badge)](LICENSE.md)

@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { listMethodTransformers } from "./method-transformers/list-method-transformers";
+import { createIdGenerator } from "./utility";
 
 export interface TransformerConfig {
 	_: void;
@@ -10,6 +11,7 @@ export class TransformContext {
 	public factory: ts.NodeFactory;
 	public _isRemoveCurrentStatement = false;
 	private _blockStatements: ts.Statement[] = [];
+	public readonly nextId = createIdGenerator();
 
 	public static get isRemoveCurrentStatement() {
 		return TransformContext.instance._isRemoveCurrentStatement;
@@ -58,8 +60,7 @@ function processNode(node: ts.Node) {
 	const transformer = listMethodTransformers.find((methodTransformer) => methodTransformer.Indentify(node));
 	if (transformer) {
 		if (transformer.IsCanOptimize(node)) {
-			transformer.Optimize(node);
-			return node;
+			return transformer.Optimize(node) ?? node;
 		}
 	}
 
@@ -88,13 +89,39 @@ function visitNode(node: ts.Node): ts.Node | ts.Node[] {
 		TransformContext.isRemoveCurrentStatement = false;
 	}
 
+	const factory = TransformContext.instance.factory;
+	const wrapInBlock = ts.isArrowFunction(node) && node.body.kind !== ts.SyntaxKind.Block;
+
+	if (wrapInBlock) {
+		const clearContext = overrideBlockStatements();
+		const returnStatement = factory.createReturnStatement(processNode(node.body) as ts.Expression);
+		const statements = [...TransformContext.blockStatements];
+
+		if (!TransformContext.isRemoveCurrentStatement) {
+			statements.push(returnStatement);
+		}
+
+		const newNode = factory.updateArrowFunction(
+			node,
+			node.modifiers,
+			node.typeParameters,
+			node.parameters,
+			node.type,
+			node.equalsGreaterThanToken,
+			factory.createBlock(statements, true),
+		);
+
+		clearContext();
+		return newNode;
+	}
+
 	newNode = processNode(node);
 
 	const returnedStatements = TransformContext.blockStatements;
 
 	if (isBlock) {
 		if (!TransformContext.isRemoveCurrentStatement) {
-			TransformContext.blockStatements.unshift(newNode as ts.Statement);
+			TransformContext.blockStatements.push(newNode as ts.Statement);
 		}
 
 		TransformContext.isRemoveCurrentStatement = lastIsRemoveCurrentStatement;
