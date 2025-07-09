@@ -57,7 +57,11 @@ export class ArrayMap extends BaseMethodTransformer {
 					factory.createBinaryExpression(
 						factory.createElementAccessExpression(
 							factory.createIdentifier(this.currentResultVariableName),
-							factory.createNumericLiteral(this.currentIndexVarriableName),
+							factory.createBinaryExpression(
+								factory.createNumericLiteral(this.currentIndexVarriableName),
+								ts.SyntaxKind.MinusToken,
+								factory.createNumericLiteral("1"),
+							),
 						),
 						factory.createToken(ts.SyntaxKind.EqualsToken),
 						returnValue,
