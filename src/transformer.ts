@@ -39,23 +39,26 @@ export class TransformContext {
 		this.factory = context.factory;
 	}
 
+	processBlock(node: ts.Block | ts.SourceFile) {
+		return ts.visitEachChild(
+			node,
+			(newNode) => {
+				const clearContext = overrideBlockStatements();
+				const result = visitNode(newNode);
+				const newNodes = Array.isArray(result) ? result : [result];
+				const statements = TransformContext.blockStatements;
+				clearContext();
+
+				return [...statements, ...newNodes];
+			},
+			this.context,
+		);
+	}
+
 	transform<T extends ts.Node>(node: T): T {
-		if (ts.isSourceFile(node)) {
-			const cleanup = overrideBlockStatements();
-			let newNode = ts.visitEachChild(node, (node) => visitNode(node), this.context);
-
-			newNode = this.factory.updateSourceFile(
-				newNode,
-				[...TransformContext.blockStatements, ...newNode.statements],
-				node.isDeclarationFile,
-				node.referencedFiles,
-				node.typeReferenceDirectives,
-				node.hasNoDefaultLib,
-				node.libReferenceDirectives,
-			) as never;
-
-			cleanup();
-			return newNode;
+		if (ts.isSourceFile(node) || ts.isBlock(node)) {
+			const a = this.processBlock(node) as unknown as T;
+			return a;
 		}
 
 		return ts.visitEachChild(node, (node) => visitNode(node), this.context);
@@ -103,10 +106,8 @@ function processNode(node: ts.Node) {
 }
 
 function visitNode(node: ts.Node): ts.Node | ts.Node[] {
-	const isBlock = ts.isBlock(node);
 	const factory = TransformContext.instance.factory;
 	const wrapInBlock = ts.isArrowFunction(node) && node.body.kind !== ts.SyntaxKind.Block;
-	let newNode = node;
 
 	if (wrapInBlock) {
 		const clearContext = overrideBlockStatements();
@@ -133,19 +134,23 @@ function visitNode(node: ts.Node): ts.Node | ts.Node[] {
 		return newNode;
 	}
 
-	if (isBlock) {
-		const clearContext = overrideBlockStatements();
-		newNode = processNode(node);
+	/*if (isBlock) {
+		const newStatements = node.statements.map((statement) => {
+			const clearContext = overrideBlockStatements();
+			const newNode = processNode(statement);
+			const statements = TransformContext.blockStatements;
+			clearContext();
 
-		const statements = TransformContext.blockStatements;
-		clearContext();
+			if (!ts.isStatement(newNode)) {
+				return statements;
+			}
 
-		if (!ts.isBlock(newNode)) {
-			return newNode;
-		}
+			return [...statements, newNode];
+		});
 
-		return factory.updateBlock(newNode, [...statements, ...newNode.statements]);
-	}
+		console.log(newStatements.flat());
+		return factory.updateBlock(node, newStatements.flat() as ts.Statement[]);
+	}*/
 
 	if (ts.isStatement(node)) {
 		const clearContext = overrideCurrentStatement();
