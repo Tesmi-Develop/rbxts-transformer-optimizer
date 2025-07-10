@@ -40,18 +40,42 @@ export class TransformContext {
 	}
 
 	transform<T extends ts.Node>(node: T): T {
+		if (ts.isSourceFile(node)) {
+			const cleanup = overrideBlockStatements();
+			let newNode = ts.visitEachChild(node, (node) => visitNode(node), this.context);
+
+			newNode = this.factory.updateSourceFile(
+				newNode,
+				[...TransformContext.blockStatements, ...newNode.statements],
+				node.isDeclarationFile,
+				node.referencedFiles,
+				node.typeReferenceDirectives,
+				node.hasNoDefaultLib,
+				node.libReferenceDirectives,
+			) as never;
+
+			cleanup();
+			return newNode;
+		}
+
 		return ts.visitEachChild(node, (node) => visitNode(node), this.context);
 	}
 }
 
 export function overrideBlockStatements() {
 	const lastBlockStatements = TransformContext.blockStatements;
-	const lastIsRemoveCurrentStatement = TransformContext.isRemoveCurrentStatement;
 	TransformContext.blockStatements = [];
-	TransformContext.isRemoveCurrentStatement = false;
 
 	return () => {
 		TransformContext.blockStatements = lastBlockStatements;
+	};
+}
+
+export function overrideCurrentStatement() {
+	const lastIsRemoveCurrentStatement = TransformContext.isRemoveCurrentStatement;
+	TransformContext.isRemoveCurrentStatement = false;
+
+	return () => {
 		TransformContext.isRemoveCurrentStatement = lastIsRemoveCurrentStatement;
 	};
 }
@@ -79,22 +103,16 @@ function processNode(node: ts.Node) {
 }
 
 function visitNode(node: ts.Node): ts.Node | ts.Node[] {
-	const isBlock = ts.isBlock(node.parent) || ts.isSourceFile(node.parent);
-	const lastStatements = TransformContext.blockStatements;
-	const lastIsRemoveCurrentStatement = TransformContext.isRemoveCurrentStatement;
-	let newNode = node;
-
-	if (isBlock) {
-		TransformContext.blockStatements = [];
-		TransformContext.isRemoveCurrentStatement = false;
-	}
-
+	const isBlock = ts.isBlock(node);
 	const factory = TransformContext.instance.factory;
 	const wrapInBlock = ts.isArrowFunction(node) && node.body.kind !== ts.SyntaxKind.Block;
+	let newNode = node;
 
 	if (wrapInBlock) {
 		const clearContext = overrideBlockStatements();
-		const returnStatement = factory.createReturnStatement(processNode(node.body) as ts.Expression);
+		const returnStatement = factory.createReturnStatement(
+			(processNode(node) as ts.ArrowFunction).body as ts.Expression,
+		);
 		const statements = [...TransformContext.blockStatements];
 
 		if (!TransformContext.isRemoveCurrentStatement) {
@@ -115,22 +133,32 @@ function visitNode(node: ts.Node): ts.Node | ts.Node[] {
 		return newNode;
 	}
 
-	newNode = processNode(node);
-
-	const returnedStatements = TransformContext.blockStatements;
-
 	if (isBlock) {
-		if (!TransformContext.isRemoveCurrentStatement) {
-			TransformContext.blockStatements.push(newNode as ts.Statement);
+		const clearContext = overrideBlockStatements();
+		newNode = processNode(node);
+
+		const statements = TransformContext.blockStatements;
+		clearContext();
+
+		if (!ts.isBlock(newNode)) {
+			return newNode;
 		}
 
-		TransformContext.isRemoveCurrentStatement = lastIsRemoveCurrentStatement;
-		TransformContext.blockStatements = lastStatements;
+		return factory.updateBlock(newNode, [...statements, ...newNode.statements]);
 	}
 
-	if (!isBlock) {
+	if (ts.isStatement(node)) {
+		const clearContext = overrideCurrentStatement();
+		const newNode = processNode(node);
+
+		if (TransformContext.isRemoveCurrentStatement) {
+			clearContext();
+			return [];
+		}
+
+		clearContext();
 		return newNode;
 	}
 
-	return returnedStatements;
+	return processNode(node);
 }

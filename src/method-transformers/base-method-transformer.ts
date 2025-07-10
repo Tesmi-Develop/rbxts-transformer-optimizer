@@ -64,7 +64,7 @@ export abstract class BaseMethodTransformer implements MethodTransformer {
 		this.currentIndexVarriableName = indexNode?.name.getText() ?? `__index`;
 
 		if (functionArgument.body !== undefined && ts.isBlock(functionArgument.body)) {
-			statements = this.allowReplaceAllReturns(functionArgument.body).statements;
+			statements = (this.allowReplaceAllReturns(functionArgument).body! as ts.Block).statements;
 		}
 
 		if (functionArgument.body !== undefined && !ts.isBlock(functionArgument.body)) {

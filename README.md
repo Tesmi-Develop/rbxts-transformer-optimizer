@@ -47,7 +47,7 @@ local array = { 1, 2, 3 }
 local __result_0 = table.create(#array)
 for __index, x in pairs(array) do
 	do
-		__result_0[__index + 1] = x * 2
+		__result_0[__index] = x * 2
 		continue
 	end
 end
