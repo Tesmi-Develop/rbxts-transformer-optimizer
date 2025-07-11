@@ -74,7 +74,7 @@ Transformer will try to turn the function into a loop if possible. The following
 | `map.forEach()`| Transforms to simple iteration loop                                               | `new Map([["a", "b"], ["c", "d"]]).forEach((v, i) => print(v, i));` → basic `for` loop |
 
 <p align="center">
-Charm is released under the <a href="LICENSE.md">MIT License</a>.
+rbxts-transformer-optimizer is released under the <a href="LICENSE.md">ISC License</a>.
 </p>
 
 <div align="center">
