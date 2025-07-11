@@ -2,15 +2,15 @@
 /* eslint-disable @typescript-eslint/no-empty-function */
 import { MethodTransformer } from "./method-transformer";
 import ts, { factory } from "typescript";
-import { overrideBlockStatements, TransformContext } from "../transformer";
+import { overrideBlockStatements, repairParentLinks, TransformContext } from "../transformer";
 import { createVariable, findAllLoopsAndSwitchs, getParameterName, haveReturn, isValidMethod } from "../utility";
 
 export abstract class BaseMethodTransformer implements MethodTransformer {
 	protected abstract methodName: string;
-	protected currentValueVarriableName = "";
-	protected lastValueVarriableName = "";
 	protected currentIndexVarriableName = "";
 	protected lastIndexVarriableName = "";
+	protected currentArrayVarriableName = "";
+	protected lastArrayVarriableName = "";
 	protected isRemoveCurrentStatement = true;
 	private insideMethodCallback = false;
 
@@ -57,11 +57,18 @@ export abstract class BaseMethodTransformer implements MethodTransformer {
 		const arrayName = functionArgument.parameters[2];
 		let statements: ReadonlyArray<ts.Statement> = [];
 
-		this.lastValueVarriableName = this.currentValueVarriableName;
-		this.currentValueVarriableName = getParameterName(valueNode) ?? `__value`;
-
 		this.lastIndexVarriableName = this.currentIndexVarriableName;
 		this.currentIndexVarriableName = getParameterName(indexNode) ?? `__index`;
+
+		const collectionNode = TransformContext.instance.transform(
+			node.expression as ts.PropertyAccessExpression,
+		).expression;
+		const arrayIdentifier = ts.isIdentifier(collectionNode)
+			? collectionNode
+			: factory.createIdentifier(getParameterName(arrayName) ?? `__array_${TransformContext.instance.nextId()}`);
+
+		this.lastArrayVarriableName = this.currentArrayVarriableName;
+		this.currentArrayVarriableName = arrayIdentifier.text;
 
 		if (functionArgument.body !== undefined && ts.isBlock(functionArgument.body)) {
 			statements = (this.allowReplaceAllReturns(functionArgument).body! as ts.Block).statements;
@@ -84,13 +91,13 @@ export abstract class BaseMethodTransformer implements MethodTransformer {
 		}
 
 		const forNodes = this.createLoop(
-			(node.expression as ts.PropertyAccessExpression).expression,
+			collectionNode,
 			node,
+			arrayIdentifier,
 			statements,
 			this.currentIndexVarriableName,
-			this.currentValueVarriableName,
-			getParameterName(arrayName),
-		)[0];
+			valueNode.name,
+		);
 
 		TransformContext.isRemoveCurrentStatement = this.isRemoveCurrentStatement;
 
@@ -100,8 +107,8 @@ export abstract class BaseMethodTransformer implements MethodTransformer {
 
 		TransformContext.blockStatements.push(...forNodes);
 
-		this.currentValueVarriableName = this.lastValueVarriableName;
 		this.currentIndexVarriableName = this.lastIndexVarriableName;
+		this.currentArrayVarriableName = this.lastArrayVarriableName;
 
 		return node;
 	}
@@ -147,15 +154,12 @@ export abstract class BaseMethodTransformer implements MethodTransformer {
 	protected createLoop(
 		collectionNode: ts.Expression,
 		callExpression: ts.CallExpression,
+		arrayIdentifier: ts.Identifier,
 		statements: ReadonlyArray<ts.Statement>,
 		indexIdentifier: string,
-		valueIdentifier: string,
-		arrayVarriableName?: string,
+		valueNode: ts.BindingName,
 	) {
 		const factory = TransformContext.instance.factory;
-		const identifier = ts.isIdentifier(collectionNode)
-			? collectionNode
-			: factory.createIdentifier(arrayVarriableName ?? `__array_${TransformContext.instance.nextId()}`);
 
 		const nodes: ts.Statement[] = [
 			factory.createForOfStatement(
@@ -170,12 +174,7 @@ export abstract class BaseMethodTransformer implements MethodTransformer {
 									factory.createIdentifier(indexIdentifier),
 									undefined,
 								),
-								factory.createBindingElement(
-									undefined,
-									undefined,
-									factory.createIdentifier(valueIdentifier),
-									undefined,
-								),
+								factory.createBindingElement(undefined, undefined, valueNode, undefined),
 							]),
 							undefined,
 							undefined,
@@ -184,15 +183,15 @@ export abstract class BaseMethodTransformer implements MethodTransformer {
 					],
 					ts.NodeFlags.Const,
 				),
-				factory.createCallExpression(factory.createIdentifier("pairs"), undefined, [identifier]),
+				factory.createCallExpression(factory.createIdentifier("pairs"), undefined, [arrayIdentifier]),
 				factory.createBlock([...statements], true),
 			),
 		];
 
 		if (!ts.isIdentifier(collectionNode)) {
-			nodes.unshift(createVariable(identifier.text, collectionNode));
+			nodes.unshift(createVariable(arrayIdentifier.text, collectionNode));
 		}
 
-		return [nodes, identifier] as const;
+		return nodes;
 	}
 }

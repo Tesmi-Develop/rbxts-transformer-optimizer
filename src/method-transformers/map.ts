@@ -1,11 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Node } from "typescript";
-import {
-	createVariable,
-	createVariableWithIdentifier,
-	getCollectionNodeFromCallExpression,
-	isRbxtsArray,
-} from "../utility";
+import { createVariable, getCollectionNodeFromCallExpression, isRbxtsArray } from "../utility";
 import ts from "typescript";
 import { BaseMethodTransformer } from "./base-method-transformer";
 import { TransformContext } from "../transformer";
@@ -29,31 +24,33 @@ export class ArrayMap extends BaseMethodTransformer {
 
 	protected processReturnExpression(node: ts.Expression): ts.Statement | void {
 		const factory = TransformContext.instance.factory;
-		return factory.createBlock(
-			[
-				factory.createExpressionStatement(
-					factory.createBinaryExpression(
-						factory.createElementAccessExpression(
-							factory.createIdentifier(this.currentResultVariableName),
+
+		TransformContext.blockStatements.push(
+			factory.createExpressionStatement(
+				factory.createBinaryExpression(
+					factory.createElementAccessExpression(
+						factory.createIdentifier(this.currentResultVariableName),
+						factory.createBinaryExpression(
 							factory.createNumericLiteral(this.currentIndexVarriableName),
+							ts.SyntaxKind.MinusToken,
+							factory.createNumericLiteral("1"),
 						),
-						factory.createToken(ts.SyntaxKind.EqualsToken),
-						node,
 					),
+					factory.createToken(ts.SyntaxKind.EqualsToken),
+					node,
 				),
-				factory.createContinueStatement(undefined),
-			],
-			true,
+			),
 		);
+
+		return factory.createContinueStatement(undefined);
 	}
 
 	protected processReturn(node: ts.ReturnStatement) {
 		const returnValue = node.expression;
 		const factory = TransformContext.instance.factory;
-		const statements: ts.Statement[] = [factory.createContinueStatement(undefined)];
 
 		if (returnValue) {
-			statements.unshift(
+			TransformContext.blockStatements.push(
 				factory.createExpressionStatement(
 					factory.createBinaryExpression(
 						factory.createElementAccessExpression(
@@ -71,7 +68,7 @@ export class ArrayMap extends BaseMethodTransformer {
 			);
 		}
 
-		return factory.createBlock(statements, true);
+		return factory.createContinueStatement(undefined);
 	}
 
 	public Optimize(node: ts.CallExpression) {
@@ -87,13 +84,20 @@ export class ArrayMap extends BaseMethodTransformer {
 	protected createLoop(
 		collectionNode: ts.Expression,
 		callExpression: ts.CallExpression,
+		arrayIdentifier: ts.Identifier,
 		statements: ReadonlyArray<ts.Statement>,
 		indexIdentifier: string,
-		valueIdentifier: string,
-		arrayVarriableName?: string,
+		valueNode: ts.BindingName,
 	) {
 		const factory = TransformContext.instance.factory;
-		const nodes = super.createLoop(collectionNode, callExpression, statements, indexIdentifier, valueIdentifier);
+		const nodes = super.createLoop(
+			collectionNode,
+			callExpression,
+			arrayIdentifier,
+			statements,
+			indexIdentifier,
+			valueNode,
+		);
 		const resultNode = createVariable(
 			this.currentResultVariableName,
 			factory.createAsExpression(
@@ -105,7 +109,7 @@ export class ArrayMap extends BaseMethodTransformer {
 					undefined,
 					[
 						factory.createCallExpression(
-							factory.createPropertyAccessExpression(nodes[1], factory.createIdentifier("size")),
+							factory.createPropertyAccessExpression(arrayIdentifier, factory.createIdentifier("size")),
 							undefined,
 							[],
 						),
@@ -114,7 +118,8 @@ export class ArrayMap extends BaseMethodTransformer {
 				this.getArrayType(callExpression),
 			),
 		);
-		ts.isVariableDeclaration(nodes[0][0]) ? nodes[0].splice(0, 1, resultNode) : nodes[0].unshift(resultNode);
+
+		ts.isVariableStatement(nodes[0]) ? nodes.splice(1, 0, resultNode) : nodes.unshift(resultNode);
 
 		return nodes;
 	}

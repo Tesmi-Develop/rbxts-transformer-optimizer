@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Node } from "typescript";
 import {
+	createOptimizedIfStatement,
 	createVariable,
 	createVariableWithIdentifier,
 	getCollectionNodeFromCallExpression,
@@ -29,7 +30,8 @@ export class Filter extends BaseMethodTransformer {
 
 	protected processReturnExpression(node: ts.Expression): ts.Statement | void {
 		const factory = TransformContext.instance.factory;
-		return factory.createIfStatement(
+
+		const resultNode = createOptimizedIfStatement(
 			node ?? factory.createFalse(),
 			factory.createBlock(
 				[
@@ -40,21 +42,41 @@ export class Filter extends BaseMethodTransformer {
 								factory.createIdentifier("push"),
 							),
 							undefined,
-							[factory.createNumericLiteral(this.currentValueVarriableName)],
+							[
+								factory.createElementAccessExpression(
+									factory.createIdentifier(this.currentArrayVarriableName),
+									factory.createBinaryExpression(
+										factory.createIdentifier(this.currentIndexVarriableName),
+										ts.SyntaxKind.MinusToken,
+										factory.createNumericLiteral("1"),
+									),
+								),
+							],
 						),
 					),
 					factory.createContinueStatement(undefined),
 				],
 				true,
 			),
-			undefined,
 		);
+
+		if (resultNode === undefined) {
+			return;
+		}
+
+		if (ts.isBlock(resultNode)) {
+			TransformContext.blockStatements.push(resultNode.statements[0]);
+			return resultNode.statements[1];
+		}
+
+		return resultNode;
 	}
 
 	protected processReturn(node: ts.ReturnStatement) {
 		const condition = node.expression;
 		const factory = TransformContext.instance.factory;
-		return factory.createIfStatement(
+
+		const resultNode = createOptimizedIfStatement(
 			condition ?? factory.createFalse(),
 			factory.createBlock(
 				[
@@ -65,15 +87,34 @@ export class Filter extends BaseMethodTransformer {
 								factory.createIdentifier("push"),
 							),
 							undefined,
-							[factory.createNumericLiteral(this.currentValueVarriableName)],
+							[
+								factory.createElementAccessExpression(
+									factory.createIdentifier(this.currentArrayVarriableName),
+									factory.createBinaryExpression(
+										factory.createIdentifier(this.currentIndexVarriableName),
+										ts.SyntaxKind.MinusToken,
+										factory.createNumericLiteral("1"),
+									),
+								),
+							],
 						),
 					),
 					factory.createContinueStatement(undefined),
 				],
 				true,
 			),
-			undefined,
 		);
+
+		if (resultNode === undefined) {
+			return;
+		}
+
+		if (ts.isBlock(resultNode)) {
+			TransformContext.blockStatements.push(resultNode.statements[0]);
+			return resultNode.statements[1];
+		}
+
+		return resultNode;
 	}
 
 	public Optimize(node: ts.CallExpression) {
@@ -89,20 +130,27 @@ export class Filter extends BaseMethodTransformer {
 	protected createLoop(
 		collectionNode: ts.Expression,
 		callExpression: ts.CallExpression,
+		arrayIdentifier: ts.Identifier,
 		statements: ReadonlyArray<ts.Statement>,
 		indexIdentifier: string,
-		valueIdentifier: string,
-		arrayVarriableName?: string,
+		valueNode: ts.BindingName,
 	) {
 		const factory = TransformContext.instance.factory;
-		const nodes = super.createLoop(collectionNode, callExpression, statements, indexIdentifier, valueIdentifier);
+		const nodes = super.createLoop(
+			collectionNode,
+			callExpression,
+			arrayIdentifier,
+			statements,
+			indexIdentifier,
+			valueNode,
+		);
 
-		nodes[0].unshift(
+		nodes.unshift(
 			createVariable(
 				this.currentResultVariableName,
 				factory.createAsExpression(
 					factory.createArrayLiteralExpression([], false),
-					this.getArrayType(nodes[1]),
+					this.getArrayType(callExpression),
 				),
 			),
 		);

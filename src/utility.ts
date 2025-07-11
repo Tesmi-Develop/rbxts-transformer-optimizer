@@ -117,3 +117,17 @@ export function createVariable(variableName: string, variableValue: ts.Expressio
 export function getParameterName(node?: ts.ParameterDeclaration) {
 	return (node?.name as ts.Identifier)?.text;
 }
+
+export function createOptimizedIfStatement(condition: ts.Expression, statement: ts.Statement) {
+	const factory = TransformContext.instance.factory;
+
+	if (condition.kind === ts.SyntaxKind.TrueKeyword) {
+		return statement;
+	}
+
+	if (condition.kind === ts.SyntaxKind.FalseKeyword) {
+		return;
+	}
+
+	return factory.createIfStatement(condition, statement, undefined);
+}

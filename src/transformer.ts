@@ -57,12 +57,33 @@ export class TransformContext {
 
 	transform<T extends ts.Node>(node: T): T {
 		if (ts.isSourceFile(node) || ts.isBlock(node)) {
-			const a = this.processBlock(node) as unknown as T;
-			return a;
+			return this.processBlock(node) as unknown as T;
 		}
 
 		return ts.visitEachChild(node, (node) => visitNode(node), this.context);
 	}
+}
+
+export function repairParentLinks<T extends ts.Node>(root: T): T {
+	ts.forEachChild(root, (node) => {
+		if (node) {
+			repairNodeParent(node, root);
+		}
+	});
+
+	return root;
+}
+
+function repairNodeParent(node: ts.Node, parent: ts.Node): void {
+	if ((node as any).parent !== parent) {
+		(node as any).parent = parent;
+	}
+
+	ts.forEachChild(node, (child) => {
+		if (child) {
+			repairNodeParent(child, node);
+		}
+	});
 }
 
 export function overrideBlockStatements() {
@@ -83,11 +104,16 @@ export function overrideCurrentStatement() {
 	};
 }
 
-function processNode(node: ts.Node) {
+function processNode(node: ts.Node): ts.Node | ts.Node[] {
 	const transformer = listMethodTransformers.find((methodTransformer) => methodTransformer.Indentify(node));
 	if (transformer) {
 		if (transformer.IsCanOptimize(node)) {
-			return transformer.Optimize(node) ?? node;
+			const result = transformer.Optimize(node);
+			if (result === false) {
+				return [];
+			}
+
+			return result ?? node;
 		}
 	}
 
@@ -111,9 +137,14 @@ function visitNode(node: ts.Node): ts.Node | ts.Node[] {
 
 	if (wrapInBlock) {
 		const clearContext = overrideBlockStatements();
-		const returnStatement = factory.createReturnStatement(
-			(processNode(node) as ts.ArrowFunction).body as ts.Expression,
-		);
+		const result = processNode(node);
+
+		if (Array.isArray(result) && result.length === 0) {
+			clearContext();
+			return [];
+		}
+
+		const returnStatement = factory.createReturnStatement((result as ts.ArrowFunction).body as ts.Expression);
 		const statements = [...TransformContext.blockStatements];
 
 		if (!TransformContext.isRemoveCurrentStatement) {
@@ -134,25 +165,7 @@ function visitNode(node: ts.Node): ts.Node | ts.Node[] {
 		return newNode;
 	}
 
-	/*if (isBlock) {
-		const newStatements = node.statements.map((statement) => {
-			const clearContext = overrideBlockStatements();
-			const newNode = processNode(statement);
-			const statements = TransformContext.blockStatements;
-			clearContext();
-
-			if (!ts.isStatement(newNode)) {
-				return statements;
-			}
-
-			return [...statements, newNode];
-		});
-
-		console.log(newStatements.flat());
-		return factory.updateBlock(node, newStatements.flat() as ts.Statement[]);
-	}*/
-
-	if (ts.isStatement(node)) {
+	if (ts.isStatement(node) || ts.isMethodDeclaration(node)) {
 		const clearContext = overrideCurrentStatement();
 		const newNode = processNode(node);
 
