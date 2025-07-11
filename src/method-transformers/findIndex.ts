@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Node } from "typescript";
 import { createVariableWithIdentifier, getCollectionNodeFromCallExpression, isRbxtsArray } from "../utility";
 import ts from "typescript";
@@ -83,59 +84,16 @@ export class FindIndex extends BaseMethodTransformer {
 	}
 
 	protected createLoop(
-		arrayName: string,
-		isIdentifier: boolean,
+		collectionNode: ts.Expression,
+		callExpression: ts.CallExpression,
 		statements: ReadonlyArray<ts.Statement>,
 		indexIdentifier: string,
 		valueIdentifier: string,
 		arrayVarriableName?: string,
 	) {
-		const factory = TransformContext.instance.factory;
+		const nodes = super.createLoop(collectionNode, callExpression, statements, indexIdentifier, valueIdentifier);
+		nodes[0].unshift(createVariableWithIdentifier(this.currentResultVariableName, "-1"));
 
-		const forNodes: ts.Statement[] = [
-			factory.createForOfStatement(
-				undefined,
-				factory.createVariableDeclarationList(
-					[
-						factory.createVariableDeclaration(
-							factory.createArrayBindingPattern([
-								factory.createBindingElement(
-									undefined,
-									undefined,
-									factory.createIdentifier(indexIdentifier),
-									undefined,
-								),
-								factory.createBindingElement(
-									undefined,
-									undefined,
-									factory.createIdentifier(valueIdentifier),
-									undefined,
-								),
-							]),
-							undefined,
-							undefined,
-							undefined,
-						),
-					],
-					ts.NodeFlags.Const,
-				),
-				factory.createCallExpression(factory.createIdentifier("pairs"), undefined, [
-					factory.createIdentifier(
-						arrayVarriableName !== undefined && !isIdentifier ? arrayVarriableName : arrayName,
-					),
-				]),
-				factory.createBlock([...statements], true),
-			),
-		];
-
-		if (arrayVarriableName !== undefined && !isIdentifier) {
-			forNodes.unshift(createVariableWithIdentifier(arrayVarriableName, arrayName));
-
-			return [factory.createBlock(forNodes, true)];
-		}
-
-		forNodes.unshift(createVariableWithIdentifier(this.currentResultVariableName, "-1"));
-
-		return forNodes;
+		return nodes;
 	}
 }

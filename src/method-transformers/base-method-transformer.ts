@@ -3,7 +3,7 @@
 import { MethodTransformer } from "./method-transformer";
 import ts, { factory } from "typescript";
 import { overrideBlockStatements, TransformContext } from "../transformer";
-import { findAllLoopsAndSwitchs, haveReturn, isValidMethod } from "../utility";
+import { createVariable, findAllLoopsAndSwitchs, getParameterName, haveReturn, isValidMethod } from "../utility";
 
 export abstract class BaseMethodTransformer implements MethodTransformer {
 	protected abstract methodName: string;
@@ -58,10 +58,10 @@ export abstract class BaseMethodTransformer implements MethodTransformer {
 		let statements: ReadonlyArray<ts.Statement> = [];
 
 		this.lastValueVarriableName = this.currentValueVarriableName;
-		this.currentValueVarriableName = valueNode?.name.getText() ?? `__value`;
+		this.currentValueVarriableName = getParameterName(valueNode) ?? `__value`;
 
 		this.lastIndexVarriableName = this.currentIndexVarriableName;
-		this.currentIndexVarriableName = indexNode?.name.getText() ?? `__index`;
+		this.currentIndexVarriableName = getParameterName(indexNode) ?? `__index`;
 
 		if (functionArgument.body !== undefined && ts.isBlock(functionArgument.body)) {
 			statements = (this.allowReplaceAllReturns(functionArgument).body! as ts.Block).statements;
@@ -84,13 +84,13 @@ export abstract class BaseMethodTransformer implements MethodTransformer {
 		}
 
 		const forNodes = this.createLoop(
-			(node.expression as ts.PropertyAccessExpression).expression.getText(),
-			ts.isIdentifier(node.expression),
+			(node.expression as ts.PropertyAccessExpression).expression,
+			node,
 			statements,
 			this.currentIndexVarriableName,
 			this.currentValueVarriableName,
-			arrayName?.name.getText(),
-		);
+			getParameterName(arrayName),
+		)[0];
 
 		TransformContext.isRemoveCurrentStatement = this.isRemoveCurrentStatement;
 
@@ -129,12 +129,70 @@ export abstract class BaseMethodTransformer implements MethodTransformer {
 		return node;
 	}
 
-	protected abstract createLoop(
-		arrayName: string,
-		isIdentifier: boolean,
+	protected getCollectionNode(node: ts.Node) {
+		if (ts.isIdentifier(node)) {
+			return node;
+		}
+	}
+
+	protected getArrayType(node: ts.Identifier | ts.CallExpression) {
+		const typeChecker = TransformContext.instance.typeChecker;
+		const type = typeChecker.getTypeAtLocation(node);
+		return (
+			typeChecker.typeToTypeNode(type, node, ts.NodeBuilderFlags.NoTruncation) ??
+			factory.createArrayTypeNode(factory.createTypeReferenceNode(factory.createIdentifier("defined"), undefined))
+		);
+	}
+
+	protected createLoop(
+		collectionNode: ts.Expression,
+		callExpression: ts.CallExpression,
 		statements: ReadonlyArray<ts.Statement>,
 		indexIdentifier: string,
 		valueIdentifier: string,
 		arrayVarriableName?: string,
-	): ts.Statement[];
+	) {
+		const factory = TransformContext.instance.factory;
+		const identifier = ts.isIdentifier(collectionNode)
+			? collectionNode
+			: factory.createIdentifier(arrayVarriableName ?? `__array_${TransformContext.instance.nextId()}`);
+
+		const nodes: ts.Statement[] = [
+			factory.createForOfStatement(
+				undefined,
+				factory.createVariableDeclarationList(
+					[
+						factory.createVariableDeclaration(
+							factory.createArrayBindingPattern([
+								factory.createBindingElement(
+									undefined,
+									undefined,
+									factory.createIdentifier(indexIdentifier),
+									undefined,
+								),
+								factory.createBindingElement(
+									undefined,
+									undefined,
+									factory.createIdentifier(valueIdentifier),
+									undefined,
+								),
+							]),
+							undefined,
+							undefined,
+							undefined,
+						),
+					],
+					ts.NodeFlags.Const,
+				),
+				factory.createCallExpression(factory.createIdentifier("pairs"), undefined, [identifier]),
+				factory.createBlock([...statements], true),
+			),
+		];
+
+		if (!ts.isIdentifier(collectionNode)) {
+			nodes.unshift(createVariable(identifier.text, collectionNode));
+		}
+
+		return [nodes, identifier] as const;
+	}
 }

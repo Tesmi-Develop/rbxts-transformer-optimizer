@@ -113,3 +113,7 @@ export function createVariable(variableName: string, variableValue: ts.Expressio
 		),
 	);
 }
+
+export function getParameterName(node?: ts.ParameterDeclaration) {
+	return (node?.name as ts.Identifier)?.text;
+}

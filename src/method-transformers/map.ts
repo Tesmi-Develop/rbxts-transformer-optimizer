@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Node } from "typescript";
 import {
 	createVariable,
@@ -84,85 +85,37 @@ export class ArrayMap extends BaseMethodTransformer {
 	}
 
 	protected createLoop(
-		arrayName: string,
-		isIdentifier: boolean,
+		collectionNode: ts.Expression,
+		callExpression: ts.CallExpression,
 		statements: ReadonlyArray<ts.Statement>,
 		indexIdentifier: string,
 		valueIdentifier: string,
 		arrayVarriableName?: string,
 	) {
 		const factory = TransformContext.instance.factory;
-
-		const forNodes: ts.Statement[] = [
-			factory.createForOfStatement(
-				undefined,
-				factory.createVariableDeclarationList(
+		const nodes = super.createLoop(collectionNode, callExpression, statements, indexIdentifier, valueIdentifier);
+		const resultNode = createVariable(
+			this.currentResultVariableName,
+			factory.createAsExpression(
+				factory.createCallExpression(
+					factory.createPropertyAccessExpression(
+						factory.createIdentifier("table"),
+						factory.createIdentifier("create"),
+					),
+					undefined,
 					[
-						factory.createVariableDeclaration(
-							factory.createArrayBindingPattern([
-								factory.createBindingElement(
-									undefined,
-									undefined,
-									factory.createIdentifier(indexIdentifier),
-									undefined,
-								),
-								factory.createBindingElement(
-									undefined,
-									undefined,
-									factory.createIdentifier(valueIdentifier),
-									undefined,
-								),
-							]),
+						factory.createCallExpression(
+							factory.createPropertyAccessExpression(nodes[1], factory.createIdentifier("size")),
 							undefined,
-							undefined,
-							undefined,
+							[],
 						),
 					],
-					ts.NodeFlags.Const,
 				),
-				factory.createCallExpression(factory.createIdentifier("pairs"), undefined, [
-					factory.createIdentifier(
-						arrayVarriableName !== undefined && !isIdentifier ? arrayVarriableName : arrayName,
-					),
-				]),
-				factory.createBlock([...statements], true),
-			),
-		];
-
-		if (arrayVarriableName !== undefined && !isIdentifier) {
-			forNodes.unshift(createVariableWithIdentifier(arrayVarriableName, arrayName));
-
-			return [factory.createBlock(forNodes, true)];
-		}
-
-		forNodes.unshift(
-			createVariable(
-				this.currentResultVariableName,
-				factory.createAsExpression(
-					factory.createCallExpression(
-						factory.createPropertyAccessExpression(
-							factory.createIdentifier("table"),
-							factory.createIdentifier("create"),
-						),
-						undefined,
-						[
-							factory.createCallExpression(
-								factory.createPropertyAccessExpression(
-									factory.createIdentifier(arrayName),
-									factory.createIdentifier("size"),
-								),
-								undefined,
-								[],
-							),
-						],
-					),
-					factory.createArrayTypeNode(
-						factory.createTypeReferenceNode(factory.createIdentifier("defined"), undefined),
-					),
-				),
+				this.getArrayType(callExpression),
 			),
 		);
+		ts.isVariableDeclaration(nodes[0][0]) ? nodes[0].splice(0, 1, resultNode) : nodes[0].unshift(resultNode);
 
-		return forNodes;
+		return nodes;
 	}
 }

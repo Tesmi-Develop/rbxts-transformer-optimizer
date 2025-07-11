@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Node } from "typescript";
-import { createVariableWithIdentifier, getCollectionNodeFromCallExpression, isRbxtsArray } from "../utility";
+import { createVariable, getCollectionNodeFromCallExpression, isRbxtsArray } from "../utility";
 import ts from "typescript";
 import { BaseMethodTransformer } from "./base-method-transformer";
 import { TransformContext } from "../transformer";
@@ -75,59 +76,23 @@ export class Find extends BaseMethodTransformer {
 	}
 
 	protected createLoop(
-		arrayName: string,
-		isIdentifier: boolean,
+		collectionNode: ts.Expression,
+		callExpression: ts.CallExpression,
 		statements: ReadonlyArray<ts.Statement>,
 		indexIdentifier: string,
 		valueIdentifier: string,
 		arrayVarriableName?: string,
 	) {
 		const factory = TransformContext.instance.factory;
+		const nodes = super.createLoop(collectionNode, callExpression, statements, indexIdentifier, valueIdentifier);
 
-		const forNodes: ts.Statement[] = [
-			factory.createForOfStatement(
-				undefined,
-				factory.createVariableDeclarationList(
-					[
-						factory.createVariableDeclaration(
-							factory.createArrayBindingPattern([
-								factory.createBindingElement(
-									undefined,
-									undefined,
-									factory.createIdentifier(indexIdentifier),
-									undefined,
-								),
-								factory.createBindingElement(
-									undefined,
-									undefined,
-									factory.createIdentifier(valueIdentifier),
-									undefined,
-								),
-							]),
-							undefined,
-							undefined,
-							undefined,
-						),
-					],
-					ts.NodeFlags.Const,
-				),
-				factory.createCallExpression(factory.createIdentifier("pairs"), undefined, [
-					factory.createIdentifier(
-						arrayVarriableName !== undefined && !isIdentifier ? arrayVarriableName : arrayName,
-					),
-				]),
-				factory.createBlock([...statements], true),
+		nodes[0].unshift(
+			createVariable(
+				this.currentResultVariableName,
+				factory.createAsExpression(factory.createIdentifier("undefined"), this.getArrayType(callExpression)),
 			),
-		];
+		);
 
-		if (arrayVarriableName !== undefined && !isIdentifier) {
-			forNodes.unshift(createVariableWithIdentifier(arrayVarriableName, arrayName));
-
-			return [factory.createBlock(forNodes, true)];
-		}
-
-		forNodes.unshift(createVariableWithIdentifier(this.currentResultVariableName, "undefined"));
-
-		return forNodes;
+		return nodes;
 	}
 }
