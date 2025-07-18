@@ -96,7 +96,7 @@ export abstract class BaseMethodTransformer implements MethodTransformer {
 			arrayIdentifier,
 			statements,
 			this.currentIndexVarriableName,
-			valueNode.name,
+			valueNode?.name ?? factory.createIdentifier(`__value`),
 		);
 
 		TransformContext.isRemoveCurrentStatement = this.isRemoveCurrentStatement;
